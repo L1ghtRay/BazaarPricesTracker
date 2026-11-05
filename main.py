@@ -4,13 +4,11 @@ import pandas as pd
 from pathlib import Path
 
 
-# with req.urlopen('https://api.hypixel.net/v2/skyblock/bazaar') as r:
-#     raw_data = json.load(r)
-
-# print(raw_data['success'], raw_data['lastUpdated'], len(raw_data['products']))
-
 URL = "https://api.hypixel.net/v2/skyblock/bazaar"
 DATA_DIR = Path("data")
+KEEP = pd.Timedelta("30days")
+WEEK = pd.Timedelta("7D")
+
 
 def fetchBazaarData():
     with req.urlopen(URL) as r:
@@ -45,9 +43,6 @@ def processData(dat: dict):
     return data
 
 
-KEEP = pd.Timedelta("30days")
-
-
 def createRowSnapshot(dat: tuple, field: str):
     timestamp = pd.to_datetime(dat[0], unit="ms", utc=True)
     row = pd.DataFrame([{k: v[field] for k, v in dat[1].items()}], index=[timestamp])
@@ -68,14 +63,46 @@ def updateHistory(row, path):
     hist.to_parquet(path, compression="zstd")
     return hist
 
+
+def cleanNumber(x): return None if pd.isna(x) else round(float(x), 1)
+
+
+def computeStats(histories):
+    fields = {}
+    for field, history in histories.items():
+        latest_ts = history.index[-1]
+        now = history.iloc[-1]
+        week = history.loc[latest_ts - WEEK:].median()
+        month = history.median()
+        fields[field] = {
+            name: [cleanNumber(now[name]), cleanNumber(week[name]), cleanNumber(month[name])]
+            for name in history.columns
+        }
+
+    empty_template = [None, None, None]
+    unique_item_names = sorted(set(fields["sell_price"]) | set(fields["buy_price"]))
+    return {
+        name: [fields["sell_price"].get(name, empty_template), fields["buy_price"].get(name, empty_template)]
+        for name in unique_item_names
+    }
+
+
+
 def main():
     DATA_DIR.mkdir(exist_ok=True)
     raw_data = fetchBazaarData()
     print(raw_data['success'], raw_data['lastUpdated'], len(raw_data['products']))
     data = processData(raw_data)
+
+    histories = {}
     for field in ('buy_price', 'sell_price'):
         row = createRowSnapshot(data, field)
-        updateHistory(row, DATA_DIR / f"{field}.parquet")
+        histories[field] = updateHistory(row, DATA_DIR / f"{field}.parquet")
+
+    stats = computeStats(histories, )
+    with open(DATA_DIR / "stats.json", 'w', encoding='utf-8') as f:
+        json.dump(stats, f, separators=(',', ':'))
+
 
 if __name__ == "__main__":
-    main()    
+    main()
