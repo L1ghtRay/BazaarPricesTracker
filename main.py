@@ -2,14 +2,22 @@ import json
 import urllib.request as req
 import pandas as pd
 from pathlib import Path
-import pyarrow
 
 
-with req.urlopen('https://api.hypixel.net/v2/skyblock/bazaar') as r:
-    raw_data = json.load(r)
+# with req.urlopen('https://api.hypixel.net/v2/skyblock/bazaar') as r:
+#     raw_data = json.load(r)
 
-print(raw_data['success'], raw_data['lastUpdated'], len(raw_data['products']))
+# print(raw_data['success'], raw_data['lastUpdated'], len(raw_data['products']))
 
+URL = "https://api.hypixel.net/v2/skyblock/bazaar"
+DATA_DIR = Path("data")
+
+def fetchBazaarData():
+    with req.urlopen(URL) as r:
+        raw = json.load(r)
+    if not raw.get('success'):
+        raise RuntimeError("Bazaar API returned 'UNSUCCESSFUL'")
+    return raw
 
 def top(orders, pick):
     prices = [price['pricePerUnit'] for price in orders]
@@ -31,8 +39,8 @@ def processData(dat: dict):
     }
     data = (dat['lastUpdated'], dict(sorted(data.items())))
 
-    with open('data/bz.json', 'w', encoding='utf-8') as f:
-        json.dump(data, f, indent=4)
+    # with open('data/bz.json', 'w', encoding='utf-8') as f:
+    #     json.dump(data, f, indent=4)
 
     return data
 
@@ -60,9 +68,14 @@ def updateHistory(row, path):
     hist.to_parquet(path, compression="zstd")
     return hist
 
+def main():
+    DATA_DIR.mkdir(exist_ok=True)
+    raw_data = fetchBazaarData()
+    print(raw_data['success'], raw_data['lastUpdated'], len(raw_data['products']))
+    data = processData(raw_data)
+    for field in ('buy_price', 'sell_price'):
+        row = createRowSnapshot(data, field)
+        updateHistory(row, DATA_DIR / f"{field}.parquet")
 
-data = processData(raw_data)
-for field in ('buy_price', 'sell_price'):
-    row = createRowSnapshot(data, field)
-    hist = updateHistory(row, f"data/{field}.parquet")
-    
+if __name__ == "__main__":
+    main()    
