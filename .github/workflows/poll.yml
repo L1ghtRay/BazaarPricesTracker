@@ -23,7 +23,7 @@ jobs:
                 python-version: "3.12"
                 cache: pip
             - run: pip install -r requirements.txt
-            - run: python main.python
+            - run: python main.py
             - name: Commit data
               working-directory: data
               run: |
