@@ -28,7 +28,7 @@ def processData(dat: dict):
             "buy_price": top(v['buy_summary'], min),
             "sell_volume": v['quick_status']['sellVolume'],
             "buy_volume": v['quick_status']['buyVolume'],
-            "sell_moving_Week": v['quick_status']['sellMovingWeek'],
+            "sell_moving_week": v['quick_status']['sellMovingWeek'],
             "buy_moving_week": v['quick_status']['buyMovingWeek'],
             "sell_orders": v['quick_status']['sellOrders'],
             "buy_orders": v['quick_status']['buyOrders']
@@ -67,7 +67,7 @@ def updateHistory(row, path):
 def cleanNumber(x): return None if pd.isna(x) else round(float(x), 1)
 
 
-def computeStats(histories):
+def computeStats(histories, latest_data):
     fields = {}
     for field, history in histories.items():
         latest_ts = history.index[-1]
@@ -81,8 +81,19 @@ def computeStats(histories):
 
     empty_template = [None, None, None]
     unique_item_names = sorted(set(fields["sell_price"]) | set(fields["buy_price"]))
+    data = latest_data[1]
+
     return {
-        name: [fields["sell_price"].get(name, empty_template), fields["buy_price"].get(name, empty_template)]
+        name: {
+            "sell_price": fields["sell_price"].get(name, empty_template), 
+            "buy_price": fields["buy_price"].get(name, empty_template),
+            "sell_volume": data[name]['sell_volume'],
+            "buy_volume": data[name]['buy_volume'],
+            "sell_moving_week": data[name]['sell_moving_week'],
+            "buy_moving_week": data[name]['buy_moving_week'],
+            "sell_orders": data[name]['sell_orders'],
+            "buy_orders": data[name]['buy_orders']
+        }
         for name in unique_item_names
     }
 
@@ -99,7 +110,7 @@ def main():
         row = createRowSnapshot(data, field)
         histories[field] = updateHistory(row, DATA_DIR / f"{field}.parquet")
 
-    stats = computeStats(histories, )
+    stats = computeStats(histories, data)
     with open(DATA_DIR / "stats.json", 'w', encoding='utf-8') as f:
         json.dump(stats, f, separators=(',', ':'))
 
